@@ -332,9 +332,10 @@ async function buildSearchQuery(recipe) {
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001', max_tokens: 60,
         messages: [{ role: 'user', content:
-          `Write a 3-5 word Unsplash photo search query for this recipe: "${recipe.name}". ` +
-          `Focus on the finished dish appearance. Return ONLY the search query, nothing else. ` +
-          `Examples: "apple cake slice overhead", "chocolate banana loaf", "plum crumble dessert bowl"`
+          `Write a 3-5 word Unsplash food photo search query for: "${recipe.name}". ` +
+          `Rules: always translate to English, describe the FOOD not literal words, focus on finished dish appearance. ` +
+          `Example: "Bienenstich" → "honey almond cream cake", "Uuniomenasose" → "baked apple puree bowl". ` +
+          `Return ONLY the search query, nothing else.`
         }]
       })
     });
