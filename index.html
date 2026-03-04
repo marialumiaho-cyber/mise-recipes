@@ -533,7 +533,6 @@ document.getElementById('saveKeysBtn').addEventListener('click', async () => {
 });
 
 document.getElementById('regenAllBtn').addEventListener('click', async () => {
-  if (!unsplashKey) return;
   const btn = document.getElementById('regenAllBtn');
   const logEl = document.getElementById('regenLog');
   logEl.innerHTML = ''; logEl.classList.add('visible');
@@ -545,7 +544,7 @@ document.getElementById('regenAllBtn').addEventListener('click', async () => {
     line.textContent = msg; logEl.appendChild(line); logEl.scrollTop = logEl.scrollHeight;
   }
 
-  rlog(`📸 Fetching photos for ${recipes.length} recipes…`);
+  rlog(`🎨 Generating images for ${recipes.length} recipes…`);
   let ok = 0;
   for (const recipe of recipes) {
     rlog(`⏳ ${recipe.name}…`);
@@ -554,12 +553,12 @@ document.getElementById('regenAllBtn').addEventListener('click', async () => {
       recipe.photo = photo; await save(); ok++;
       rlog(`✅ ${recipe.name}`, 'ok');
     } else {
-      rlog(`❌ ${recipe.name} — no result`, 'err');
+      rlog(`❌ ${recipe.name} — failed`, 'err');
     }
     renderGrid();
     await new Promise(r => setTimeout(r, 500));
   }
-  rlog(`🎉 Done! ${ok}/${recipes.length} photos fetched.`, 'ok');
+  rlog(`🎉 Done! ${ok}/${recipes.length} images generated.`, 'ok');
   btn.classList.remove('loading'); btn.disabled = false;
 });
 
