@@ -359,6 +359,13 @@ async function loadAll() {
   } catch(e) {
     recipes = SEED_RECIPES.map((r,i) => ({...r, id: String(i+1), addedAt: Date.now()-(12-i)*86400000}));
   }
+  // Load images stored separately (they're too large to fit with recipes)
+  for (const recipe of recipes) {
+    try {
+      const img = await window.storage.get('mise-img-' + recipe.id);
+      if (img && img.value) recipe.photo = JSON.parse(img.value);
+    } catch(e) {}
+  }
   try {
     const ck = await window.storage.get('mise-claude-key');
     if (ck && ck.value) claudeKey = ck.value;
@@ -368,7 +375,17 @@ async function loadAll() {
   renderGrid();
 }
 async function save() {
-  try { await window.storage.set('mise-recipes-v3', JSON.stringify(recipes)); } catch(e) {}
+  // Save recipes without photos (keep under 5MB limit)
+  const recipesWithoutPhotos = recipes.map(r => { const {photo, ...rest} = r; return rest; });
+  try { await window.storage.set('mise-recipes-v3', JSON.stringify(recipesWithoutPhotos)); } catch(e) {}
+  // Save each image separately
+  for (const recipe of recipes) {
+    try {
+      if (recipe.photo) {
+        await window.storage.set('mise-img-' + recipe.id, JSON.stringify(recipe.photo));
+      }
+    } catch(e) {}
+  }
 }
 
 // ─── STATUS UI ────────────────────────────────────────────
