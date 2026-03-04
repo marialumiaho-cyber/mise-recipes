@@ -341,10 +341,10 @@ async function getPhotoForRecipe(recipe) {
       body: JSON.stringify({ prompt })
     });
     const data = await res.json();
-    if (data.predictions && data.predictions[0] && data.predictions[0].bytesBase64Encoded) {
-      return { url: `data:image/png;base64,${data.predictions[0].bytesBase64Encoded}` };
+    if (data.image) {
+      const mimeType = data.mimeType || 'image/png';
+      return { url: `data:${mimeType};base64,${data.image}` };
     }
-    // Return the actual error message so we can show it in the log
     const errMsg = data.error?.message || data.error || JSON.stringify(data).slice(0, 120);
     return { error: errMsg };
   } catch(e) {
