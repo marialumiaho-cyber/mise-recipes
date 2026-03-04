@@ -91,6 +91,10 @@
   .preview-thumb{width:72px;height:72px;border-radius:8px;object-fit:cover;border:2px solid var(--warm-grey)}
 
   .primary-btn{width:100%;padding:15px;background:var(--accent);color:white;border:none;border-radius:100px;font-size:15px;font-weight:700;cursor:pointer;font-family:var(--font);display:flex;align-items:center;justify-content:center;gap:8px;transition:opacity .15s}
+  .secondary-btn{width:100%;padding:12px;background:transparent;border:1.5px solid var(--black);border-radius:100px;font-size:14px;font-weight:600;cursor:pointer;font-family:var(--font);display:flex;align-items:center;justify-content:center;gap:8px;transition:opacity .15s}
+  .secondary-btn .spinner{display:none;width:16px;height:16px;border:2px solid rgba(0,0,0,0.2);border-top-color:#000;border-radius:50%;animation:spin 0.7s linear infinite}
+  .secondary-btn.loading .spinner{display:block}
+  .secondary-btn.loading .btn-text{opacity:0.5}
   .primary-btn:disabled{opacity:.45;cursor:not-allowed}
   .primary-btn .spinner{width:18px;height:18px;border:2px solid rgba(255,255,255,.4);border-top-color:white;border-radius:50%;animation:spin .7s linear infinite;display:none}
   .primary-btn.loading .spinner{display:block}
@@ -225,9 +229,13 @@
     <div class="settings-section">
       <div class="settings-label">Generate photos for all recipes</div>
       <p class="regen-info">Generate a unique AI food photo for every recipe using Google Imagen. Each image is crafted from your recipe's name and ingredients.</p>
-      <button class="primary-btn" id="regenAllBtn" style="background:var(--black)" disabled>
+      <button class="primary-btn" id="regenAllBtn" style="background:var(--black)">
         <div class="spinner"></div>
         <span class="btn-text">✨ Generate images for all recipes</span>
+      </button>
+      <button class="secondary-btn" id="retryFailedBtn" style="margin-top:8px;display:none">
+        <div class="spinner"></div>
+        <span class="btn-text">🔄 Retry failed images</span>
       </button>
       <div class="progress-log" id="regenLog"></div>
     </div>
@@ -370,7 +378,6 @@ async function loadAll() {
     const ck = await window.storage.get('mise-claude-key');
     if (ck && ck.value) claudeKey = ck.value;
   } catch(e) {}
-  await save();
   updateKeyStatus();
   renderGrid();
 }
@@ -547,21 +554,15 @@ document.getElementById('saveKeysBtn').addEventListener('click', async () => {
   showToast('✅ Keys saved!');
 });
 
-document.getElementById('regenAllBtn').addEventListener('click', async () => {
-  const btn = document.getElementById('regenAllBtn');
-  const logEl = document.getElementById('regenLog');
-  logEl.innerHTML = ''; logEl.classList.add('visible');
-  btn.classList.add('loading'); btn.disabled = true;
-
+async function generateForList(recipeList, logEl) {
   function rlog(msg, type='') {
     const line = document.createElement('div');
     line.className = `pline${type?' '+type:''}`;
     line.textContent = msg; logEl.appendChild(line); logEl.scrollTop = logEl.scrollHeight;
   }
-
-  rlog(`🎨 Generating images for ${recipes.length} recipes…`);
   let ok = 0;
-  for (const recipe of recipes) {
+  rlog(`🎨 Generating images for ${recipeList.length} recipes…`);
+  for (const recipe of recipeList) {
     rlog(`⏳ ${recipe.name}…`);
     const result = await getPhotoForRecipe(recipe);
     if (result && result.url) {
@@ -574,8 +575,33 @@ document.getElementById('regenAllBtn').addEventListener('click', async () => {
     renderGrid();
     await new Promise(r => setTimeout(r, 500));
   }
-  rlog(`🎉 Done! ${ok}/${recipes.length} images generated.`, 'ok');
+  rlog(`🎉 Done! ${ok}/${recipeList.length} images generated.`, 'ok');
+  const failed = recipeList.filter(r => !r.photo);
+  document.getElementById('retryFailedBtn').style.display = failed.length > 0 ? 'flex' : 'none';
+  return ok;
+}
+
+document.getElementById('regenAllBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('regenAllBtn');
+  const logEl = document.getElementById('regenLog');
+  logEl.innerHTML = ''; logEl.classList.add('visible');
+  btn.classList.add('loading'); btn.disabled = true;
+  document.getElementById('retryFailedBtn').style.display = 'none';
+  await generateForList(recipes, logEl);
   btn.classList.remove('loading'); btn.disabled = false;
+});
+
+document.getElementById('retryFailedBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('retryFailedBtn');
+  const logEl = document.getElementById('regenLog');
+  const failed = recipes.filter(r => !r.photo);
+  if (!failed.length) return;
+  logEl.innerHTML = ''; logEl.classList.add('visible');
+  btn.classList.add('loading'); btn.disabled = true;
+  document.getElementById('regenAllBtn').disabled = true;
+  await generateForList(failed, logEl);
+  btn.classList.remove('loading'); btn.disabled = false;
+  document.getElementById('regenAllBtn').disabled = false;
 });
 
 // ─── ADD RECIPE ───────────────────────────────────────────
