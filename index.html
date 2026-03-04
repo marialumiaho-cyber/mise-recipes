@@ -344,11 +344,11 @@ async function getPhotoForRecipe(recipe) {
     if (data.predictions && data.predictions[0] && data.predictions[0].bytesBase64Encoded) {
       return { url: `data:image/png;base64,${data.predictions[0].bytesBase64Encoded}` };
     }
-    console.warn('Imagen response:', JSON.stringify(data));
-    return null;
+    // Return the actual error message so we can show it in the log
+    const errMsg = data.error?.message || data.error || JSON.stringify(data).slice(0, 120);
+    return { error: errMsg };
   } catch(e) {
-    console.error('Image generation error:', e);
-    return null;
+    return { error: e.message };
   }
 }
 
@@ -548,12 +548,13 @@ document.getElementById('regenAllBtn').addEventListener('click', async () => {
   let ok = 0;
   for (const recipe of recipes) {
     rlog(`⏳ ${recipe.name}…`);
-    const photo = await getPhotoForRecipe(recipe);
-    if (photo) {
-      recipe.photo = photo; await save(); ok++;
+    const result = await getPhotoForRecipe(recipe);
+    if (result && result.url) {
+      recipe.photo = result; await save(); ok++;
       rlog(`✅ ${recipe.name}`, 'ok');
     } else {
-      rlog(`❌ ${recipe.name} — failed`, 'err');
+      const reason = (result && result.error) ? result.error : 'unknown error';
+      rlog(`❌ ${recipe.name} — ${reason}`, 'err');
     }
     renderGrid();
     await new Promise(r => setTimeout(r, 500));
