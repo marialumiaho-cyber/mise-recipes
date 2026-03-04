@@ -390,12 +390,10 @@ async function getPhotoForRecipe(recipe) {
     const res = await fetch(WORKER_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt })
+      body: JSON.stringify({ prompt, recipeId: recipe.id })
     });
     const data = await res.json();
-    if (data.image) {
-      return { url: `data:${data.mimeType || 'image/png'};base64,${data.image}` };
-    }
+    if (data.url) return { url: data.url };
     return { error: data.error || 'No image in response' };
   } catch(e) {
     return { error: e.message };
@@ -411,7 +409,7 @@ async function loadAll() {
   } catch(e) {
     recipes = SEED_RECIPES.map((r,i) => ({...r, id: String(i+1), addedAt: Date.now()-(12-i)*86400000}));
   }
-  // Load images stored separately (they're too large to fit with recipes)
+  // Load images stored separately (legacy base64 support + R2 URLs)
   for (const recipe of recipes) {
     try {
       const img = await window.storage.get('mise-img-' + recipe.id);
@@ -425,17 +423,30 @@ async function loadAll() {
   updateKeyStatus();
   renderGrid();
 }
+async function compressImage(dataUrl, maxWidth=800, quality=0.75) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const scale = Math.min(1, maxWidth / img.width);
+      canvas.width = img.width * scale;
+      canvas.height = img.height * scale;
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+}
+
 async function save() {
-  // Save recipes without photos (keep under 5MB limit)
-  const recipesWithoutPhotos = recipes.map(r => { const {photo, ...rest} = r; return rest; });
-  try { await window.storage.set('mise-recipes-v3', JSON.stringify(recipesWithoutPhotos)); } catch(e) {}
-  // Save each image separately
+  // With R2, photos are just URLs — tiny enough to store with recipes
+  try { await window.storage.set('mise-recipes-v3', JSON.stringify(recipes)); } catch(e) { console.error('Failed to save recipes:', e); }
+  // Also save images separately for legacy compatibility
   for (const recipe of recipes) {
-    try {
-      if (recipe.photo) {
-        await window.storage.set('mise-img-' + recipe.id, JSON.stringify(recipe.photo));
-      }
-    } catch(e) {}
+    if (recipe.photo && recipe.photo.url && !recipe.photo.url.startsWith('data:')) {
+      try { await window.storage.set('mise-img-' + recipe.id, JSON.stringify(recipe.photo)); } catch(e) {}
+    }
   }
 }
 
@@ -722,12 +733,10 @@ Return ONLY valid JSON (no markdown) in exactly this structure:
     const extracted = JSON.parse(text);
     const recipe = { id: Date.now().toString(), addedAt: Date.now(), rating: 0, fav: false, ...extracted };
 
-    if (unsplashKey) {
-      plog('🎨 Generating AI food photo with Imagen…');
-      const photo = await getPhotoForRecipe(recipe);
-      if (photo) { recipe.photo = photo; plog(`📸 Photo found: "${photo.query}"`, 'ok'); }
-      else plog('⚠️ No photo found — added without image', 'err');
-    }
+    plog('🎨 Generating AI food photo with Imagen…');
+    const photo = await getPhotoForRecipe(recipe);
+    if (photo && photo.url) { recipe.photo = photo; plog('📸 Photo generated!', 'ok'); }
+    else plog('⚠️ No photo generated — added without image', 'err');
 
     recipes.unshift(recipe); await save();
     plog(`🎉 "${recipe.name}" added!`, 'ok');
