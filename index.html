@@ -320,32 +320,42 @@ function getFallback(r) {
 function getPhotoUrl(r) { return (r.photo && r.photo.url) ? r.photo.url : getFallback(r); }
 
 // ─── CLAUDE: build smart Unsplash query ──────────────────
-// ─── IMAGEN via Cloudflare Worker ────────────────────────
+// ─── UNSPLASH via Cloudflare Worker ──────────────────────
 const WORKER_URL = 'https://mise-proxy.maria-lumiaho.workers.dev';
 
-function buildImagePrompt(recipe) {
-  const ingredients = (recipe.ingredients||[]).slice(0,4).map(i => i.name).join(', ');
-  return `Professional food photography of ${recipe.name}. ` +
-    `Key ingredients: ${ingredients}. ` +
-    `Overhead shot, natural window light, white ceramic dish, linen napkin, ` +
-    `editorial cookbook aesthetic, shallow depth of field, warm tones, highly appetising. ` +
-    `Photo-realistic, no text, no watermarks.`;
+async function buildSearchQuery(recipe) {
+  if (!claudeKey) return recipe.name + ' food';
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': claudeKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001', max_tokens: 60,
+        messages: [{ role: 'user', content:
+          `Write a 3-5 word Unsplash photo search query for this recipe: "${recipe.name}". ` +
+          `Focus on the finished dish appearance. Return ONLY the search query, nothing else. ` +
+          `Examples: "apple cake slice overhead", "chocolate banana loaf", "plum crumble dessert bowl"`
+        }]
+      })
+    });
+    const data = await res.json();
+    return data.content[0].text.trim().replace(/["']/g,'') || recipe.name + ' food';
+  } catch(e) {
+    return recipe.name + ' food photography';
+  }
 }
 
 async function getPhotoForRecipe(recipe) {
   try {
-    const prompt = buildImagePrompt(recipe);
+    const query = await buildSearchQuery(recipe);
     const res = await fetch(WORKER_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt })
+      body: JSON.stringify({ query })
     });
     const data = await res.json();
-    if (data.image) {
-      const mimeType = data.mimeType || 'image/png';
-      return { url: `data:${mimeType};base64,${data.image}` };
-    }
-    const errMsg = data.error?.message || (typeof data.error === "string" ? data.error : null) || JSON.stringify(data.raw || data).slice(0, 200);
+    if (data.url) return data;
+    const errMsg = typeof data.error === 'string' ? data.error : JSON.stringify(data).slice(0, 200);
     return { error: errMsg };
   } catch(e) {
     return { error: e.message };
