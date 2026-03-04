@@ -409,11 +409,16 @@ async function loadAll() {
   } catch(e) {
     recipes = SEED_RECIPES.map((r,i) => ({...r, id: String(i+1), addedAt: Date.now()-(12-i)*86400000}));
   }
-  // Load images stored separately (legacy base64 support + R2 URLs)
+  // Load images — prefer URL stored directly in recipe, fall back to separate key for R2 URLs only
   for (const recipe of recipes) {
+    if (recipe.photo && recipe.photo.url) continue; // already has photo from recipes store
     try {
       const img = await window.storage.get('mise-img-' + recipe.id);
-      if (img && img.value) recipe.photo = JSON.parse(img.value);
+      if (img && img.value) {
+        const parsed = JSON.parse(img.value);
+        // Only use if it's an R2 URL, not old base64
+        if (parsed.url && !parsed.url.startsWith('data:')) recipe.photo = parsed;
+      }
     } catch(e) {}
   }
   try {
